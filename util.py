@@ -16,7 +16,7 @@ filterwarnings("ignore")
 
 full_list = glob.glob(r'C:\Users\leona\PycharmProjects\Python Data Analysis Projects\AAProject sets - 2\SandP-stock-analysis\individual_stocks_5yr/*csv')
 
-print(*full_list, sep='\n')
+# print(*full_list, sep='\n')
 
 company_list = [
     r'C:\Users\leona\PycharmProjects\Python Data Analysis Projects\AAProject sets - 2\SandP-stock-analysis\individual_stocks_5yr\AAPL_data.csv',
@@ -35,4 +35,14 @@ for file in company_list:
 # 3. Use pd.concat to merge them all at once
 all_data = pd.concat(temp_list, ignore_index=True)
 
-print(all_data.head())
+all_data['date'] = pd.to_datetime(all_data['date'])
+tech_list = all_data['Name'].unique()
+
+plt.figure(figsize=(20, 12))
+
+for index, company in enumerate(tech_list, 1):
+    plt.subplot(2,2,index)
+    filter1 = all_data['Name']==company
+    df = all_data[filter1]
+    plt.plot(df['date'], df['close'])
+    plt.title(company)
