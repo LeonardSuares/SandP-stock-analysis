@@ -1,100 +1,105 @@
 import streamlit as st
 import pandas as pd
-import numpy as np
-import seaborn as sns
-import matplotlib.pyplot as plt
-import os
 import plotly.express as px
-import glob
+import os
 
-pd.set_option('display.max_columns', None)
-pd.set_option('display.width', 1000)
+# 1. PAGE CONFIGURATION
+st.set_page_config(page_title="Tech Stock Dashboard", layout="wide")
 
-import  warnings
-from warnings import filterwarnings
-filterwarnings("ignore")
 
-full_list = glob.glob(r'C:\Users\leona\PycharmProjects\Python Data Analysis Projects\AAProject sets - 2\SandP-stock-analysis\individual_stocks_5yr/*csv')
+# 2. CACHED DATA LOADING
+@st.cache_data
+def load_and_process_data(file_paths):
+    temp_list = []
+    for file in file_paths:
+        if os.path.exists(file):
+            df = pd.read_csv(file)
+            temp_list.append(df)
 
-# print(*full_list, sep='\n')
+    all_data = pd.concat(temp_list, ignore_index=True)
+    all_data['date'] = pd.to_datetime(all_data['date'])
+    all_data = all_data.sort_values(['Name', 'date'])
 
-company_list = [
-    r'C:\Users\leona\PycharmProjects\Python Data Analysis Projects\AAProject sets - 2\SandP-stock-analysis\individual_stocks_5yr\AAPL_data.csv',
-    r'C:\Users\leona\PycharmProjects\Python Data Analysis Projects\AAProject sets - 2\SandP-stock-analysis\individual_stocks_5yr\AMZN_data.csv',
-    r'C:\Users\leona\PycharmProjects\Python Data Analysis Projects\AAProject sets - 2\SandP-stock-analysis\individual_stocks_5yr\GOOG_data.csv',
-    r'C:\Users\leona\PycharmProjects\Python Data Analysis Projects\AAProject sets - 2\SandP-stock-analysis\individual_stocks_5yr\MSFT_data.csv'
-]
+    # Pre-calculate Moving Averages
+    ma_day = [10, 20, 50]
+    for ma in ma_day:
+        all_data[f'MA_{ma}'] = all_data.groupby('Name')['close'].transform(lambda x: x.rolling(window=ma).mean())
 
-temp_list = []
+    return all_data
 
-for file in company_list:
-    current_df = pd.read_csv(file)
-    # 2. Append the dataframe to the LIST (not a dataframe)
-    temp_list.append(current_df)
 
-# 3. Use pd.concat to merge them all at once
-all_data = pd.concat(temp_list, ignore_index=True)
+# --- DATA SETUP ---
+base_path = r'C:\Users\leona\PycharmProjects\Python Data Analysis Projects\AAProject sets - 2\SandP-stock-analysis\individual_stocks_5yr'
+tickers = ['AAPL', 'AMZN', 'GOOG', 'MSFT']
+files = [os.path.join(base_path, f"{t}_data.csv") for t in tickers]
 
-# Ensure data is sorted by date to prevent line tangling
-all_data['date'] = pd.to_datetime(all_data['date'])
-all_data = all_data.sort_values('date')
+all_data = load_and_process_data(files)
 
-st.subheader("Interactive Stock Price Comparison")
+# --- SIDEBAR CONTROLS ---
+st.sidebar.header("Dashboard Settings")
+st.sidebar.markdown("Filter your view and analysis parameters here.")
+date_range = st.sidebar.date_input("Select Date Range",
+                                   value=(all_data['date'].min(), all_data['date'].max()))
 
-# Create the Plotly figure
-fig_plotly = px.line(
-    all_data,
-    x="date",
-    y="close",
-    color="Name",
-    title="Tech Stock Prices (AAPL, AMZN, GOOG, MSFT)",
-    labels={"close": "Closing Price ($)", "date": "Year"},
-    template="plotly_white" # Gives it a clean, professional look
-)
+# --- MAIN UI ---
+st.title("🚀 Tech Stock Performance Dashboard")
+st.markdown("Detailed analysis of Apple, Amazon, Google, and Microsoft stock data.")
 
-# Improve the layout (optional)
-fig_plotly.update_layout(
-    hovermode="x unified", # Shows all stock prices in one tooltip when hovering
-    legend_title_text='Company'
-)
+# 3. KPI SECTION (Metrics)
+st.subheader("Current Market Snapshots")
+cols = st.columns(len(tickers))
+for i, ticker in enumerate(tickers):
+    latest_price = all_data[all_data['Name'] == ticker]['close'].iloc[-1]
+    prev_price = all_data[all_data['Name'] == ticker]['close'].iloc[-2]
+    delta = ((latest_price - prev_price) / prev_price) * 100
+    cols[i].metric(label=ticker, value=f"${latest_price:.2f}", delta=f"{delta:.2f}%")
 
-# Display in Streamlit
-st.plotly_chart(fig_plotly, use_container_width=True)
+st.divider()
 
-# 2. Correct Moving Average Calculation
-# We use groupby('Name') so the rolling window resets for each stock
-ma_day = [10, 20, 50]
-for ma in ma_day:
-    all_data[f'MA_{ma}'] = all_data.groupby('Name')['close'].transform(lambda x: x.rolling(window=ma).mean())
+# 4. ORGANIZED TABS
+tab1, tab2, tab3 = st.tabs(["📊 Price Comparison", "📈 Technical Indicators", "📉 Daily Returns"])
 
-# 3. Reshape data for Plotly (Wide to Long)
-# Plotly Express works best when all values to be plotted are in one column
-plot_columns = ['close', 'MA_10', 'MA_20', 'MA_50']
-df_long = pd.melt(
-    all_data,
-    id_vars=['date', 'Name'],
-    value_vars=plot_columns,
-    var_name='Metric',
-    value_name='Price'
-)
+with tab1:
+    st.subheader("Cumulative Price Growth")
+    fig_price = px.line(
+        all_data, x="date", y="close", color="Name",
+        title="Closing Prices Over Time",
+        template="plotly_white"
+    )
+    fig_price.update_layout(hovermode="x unified")
+    st.plotly_chart(fig_price, use_container_width=True)
 
-# 4. Create the Interactive Visual
-st.title("Stock Analysis with Moving Averages")
+with tab2:
+    st.subheader("Moving Average Analysis")
+    st.info(
+        "Moving averages help smooth out price action by filtering out the 'noise' from random short-term price fluctuations.")
 
-fig = px.line(
-    df_long,
-    x='date',
-    y='Price',
-    color='Metric',      # Different lines for Close and MAs
-    facet_col='Name',    # Create subplots based on Company Name
-    facet_col_wrap=2,    # Wrap into a 2x2 grid
-    title="Tech Stocks: Close vs Moving Averages",
-    labels={'Price': 'Price ($)', 'date': 'Date'},
-    height=800
-)
+    # [Image of stock market technical indicators Moving Averages]
 
-# Improve UI: Synchronize axes and update legend
-fig.update_yaxes(matches=None) # Allow each stock to have its own price scale
-fig.update_layout(hovermode="x unified")
+    # Reshape for MA visualization
+    plot_columns = ['close', 'MA_10', 'MA_20', 'MA_50']
+    df_long = pd.melt(all_data, id_vars=['date', 'Name'], value_vars=plot_columns,
+                      var_name='Metric', value_name='Price')
 
-st.plotly_chart(fig, use_container_width=True)
+    fig_ma = px.line(
+        df_long, x='date', y='Price', color='Metric',
+        facet_col='Name', facet_col_wrap=2,
+        title="Price vs. Moving Averages (10, 20, 50 Day)",
+        height=700
+    )
+    fig_ma.update_yaxes(matches=None)
+    fig_ma.update_layout(hovermode="x unified")
+    st.plotly_chart(fig_ma, use_container_width=True)
+
+with tab3:
+    st.subheader("Volatility & Daily Returns")
+    all_data['Daily return(in %)'] = all_data.groupby('Name')['close'].pct_change() * 100
+
+    # [Image of wide vs long data format transformation]
+
+    fig_return = px.line(
+        all_data, x='date', y='Daily return(in %)', color='Name',
+        title="Daily Percentage Returns",
+        labels={'Daily return(in %)': 'Return %'}
+    )
+    st.plotly_chart(fig_return, use_container_width=True)
