@@ -35,14 +35,28 @@ for file in company_list:
 # 3. Use pd.concat to merge them all at once
 all_data = pd.concat(temp_list, ignore_index=True)
 
+# Ensure data is sorted by date to prevent line tangling
 all_data['date'] = pd.to_datetime(all_data['date'])
-tech_list = all_data['Name'].unique()
+all_data = all_data.sort_values('date')
 
-plt.figure(figsize=(20, 12))
+st.subheader("Interactive Stock Price Comparison")
 
-for index, company in enumerate(tech_list, 1):
-    plt.subplot(2,2,index)
-    filter1 = all_data['Name']==company
-    df = all_data[filter1]
-    plt.plot(df['date'], df['close'])
-    plt.title(company)
+# Create the Plotly figure
+fig_plotly = px.line(
+    all_data,
+    x="date",
+    y="close",
+    color="Name",
+    title="Tech Stock Prices (AAPL, AMZN, GOOG, MSFT)",
+    labels={"close": "Closing Price ($)", "date": "Year"},
+    template="plotly_white" # Gives it a clean, professional look
+)
+
+# Improve the layout (optional)
+fig_plotly.update_layout(
+    hovermode="x unified", # Shows all stock prices in one tooltip when hovering
+    legend_title_text='Company'
+)
+
+# Display in Streamlit
+st.plotly_chart(fig_plotly, use_container_width=True)
